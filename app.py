@@ -48,7 +48,7 @@ with col2:
                             "content": [
                                 {
                                     "type": "text", 
-                                    "text": "Identify the data points in this graph image. Output a single JSON string object containing exactly three keys: 'x' (a list of numbers), 'y' (a list of matching numbers), and 'label' (a string title name). Example structure: {\"x\": [1,2,3], \"y\": [10,20,30], \"label\": \"Growth Curve\"}. Do not output any markdown code blocks, backticks, summaries, or pre-text conversation."
+                                    "text": "Identify the data points in this graph image. Output a single JSON string object containing exactly three keys: 'x' (a list of numbers), 'y' (a list of matching numbers), and 'label' (a string title name). Example structure: {\"x\":, \"y\":, \"label\": \"Growth Curve\"}. Do not output any markdown code blocks, backticks, summaries, or pre-text conversation."
                                 },
                                 {
                                     "type": "image_url", 
@@ -113,8 +113,9 @@ if user_question:
             st.write(user_question)
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
+                # FIX: Swapped out decommissioned text model name for active vision model text handler
                 chat_completion = client.chat.completions.create(
-                    model="llama3-8b-8192",
+                    model="llama-3.2-11b-vision-preview",
                     messages=[{"role": "user", "content": user_question}]
                 )
                 st.write(chat_completion.choices.message.content)
