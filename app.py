@@ -11,8 +11,8 @@ st.title("📊 Smart Graph Camera & AI Assistant")
 st.write("Snap a photo of any graph to recreate it dynamically and get the code!")
 
 # 2. Sidebar for Free API Configuration
-st.sidebar.header("🔧 Setup Setup")
-st.sidebar.write("Get a 100% free API key at [://groq.com](https://://groq.com/)")
+st.sidebar.header("🔧 Setup")
+st.sidebar.write("Get a 100% free API key at [console.groq.com](https://console.groq.com/)")
 api_key = st.sidebar.text_input("Enter your Groq API Key:", type="password")
 
 # Initialize Groq Client if key is provided
@@ -34,13 +34,13 @@ with col2:
     if camera_img and client:
         with st.spinner("AI is analyzing the graph structure..."):
             try:
-                # FIX: Convert the camera image bytes into a Base64 encoded string format for Groq API compatibility
+                # Convert the camera image bytes into a Base64 encoded string format
                 image_bytes = camera_img.getvalue()
                 base64_image = base64.b64encode(image_bytes).decode("utf-8")
                 
-                # Ask Llama-Vision to read the graph data points
+                # FIX: Swapped out decommissioned "preview" model for the updated active "instruct" model
                 completion = client.chat.completions.create(
-                    model="llama-3.2-11b-vision-preview",
+                    model="llama-3.2-11b-vision-instruct",
                     messages=[
                         {
                             "role": "user",
@@ -55,7 +55,7 @@ with col2:
                 # Parse the AI response safely
                 raw_response = completion.choices.message.content.strip()
                 
-                # Safety check to strip accidental markdown code blocks if the AI includes them
+                # Clean up format strings if the AI includes structural backticks
                 if raw_response.startswith("```json"):
                     raw_response = raw_response.replace("```json", "").replace("```", "").strip()
                 elif raw_response.startswith("```"):
@@ -88,7 +88,6 @@ fig.show()"""
                 st.error(f"Error processing the graph. Please ensure the image is clear. Details: {e}")
 
 # 4. Interactive Chat Assistant Feature at the bottom
-# FIX: Swapped broken st.hr() with correct official Streamlit divider system
 st.divider()
 st.subheader("💬 Ask the AI Graph Assistant")
 user_question = st.chat_input("Ask a question about your data or math equations...")
@@ -99,6 +98,7 @@ if user_question:
             st.write(user_question)
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
+                # Using standard active text model for chatting
                 chat_completion = client.chat.completions.create(
                     model="llama3-8b-8192",
                     messages=[{"role": "user", "content": user_question}]
