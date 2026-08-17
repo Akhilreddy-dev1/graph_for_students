@@ -3,6 +3,7 @@ import plotly.express as px
 import pandas as pd
 import json
 import base64
+import re
 from groq import Groq
 
 # 1. Page Configuration
@@ -10,15 +11,15 @@ st.set_page_config(page_title="AI Graph Finder", layout="wide")
 st.title("📊 Smart Graph Camera & AI Assistant")
 st.write("Snap a photo of any graph to recreate it dynamically and get the code!")
 
-# 2. Sidebar for Free API Configuration
+# 2. Sidebar Configuration
 st.sidebar.header("🔧 Setup")
 st.sidebar.write("Get a 100% free API key at [console.groq.com](https://console.groq.com/)")
 api_key = st.sidebar.text_input("Enter your Groq API Key:", type="password")
 
-# Initialize Groq Client if key is provided
+# Initialize Groq Client
 client = Groq(api_key=api_key) if api_key else None
 
-# 3. Layout: Split screen into Camera and Results
+# 3. Layout Configuration
 col1, col2 = st.columns(2)
 
 with col1:
@@ -34,46 +35,56 @@ with col2:
     if camera_img and client:
         with st.spinner("AI is analyzing the graph structure..."):
             try:
-                # Convert the camera image bytes into a Base64 encoded string format
+                # Base64 encode the binary camera data stream
                 image_bytes = camera_img.getvalue()
                 base64_image = base64.b64encode(image_bytes).decode("utf-8")
                 
-                # FIX: Swapped out decommissioned "preview" model for the updated active "instruct" model
+                # Query Groq via the active multimodal channel
                 completion = client.chat.completions.create(
-                    model="llama-3.2-11b-vision-instruct",
+                    model="llama-3.2-11b-vision-preview",
                     messages=[
                         {
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": "Analyze this graph. Extract 5-10 key approximate (x, y) data points. Return ONLY a valid, clean JSON object like this: {\"x\":, \"y\":, \"label\": \"Graph Title\"}. Do not write any conversational intro or markdown backticks."},
-                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                                {
+                                    "type": "text", 
+                                    "text": "Identify the data points in this graph image. Output a single JSON string object containing exactly three keys: 'x' (a list of numbers), 'y' (a list of matching numbers), and 'label' (a string title name). Example structure: {\"x\": [1,2,3], \"y\": [10,20,30], \"label\": \"Growth Curve\"}. Do not output any markdown code blocks, backticks, summaries, or pre-text conversation."
+                                },
+                                {
+                                    "type": "image_url", 
+                                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
+                                }
                             ]
                         }
                     ]
                 )
                 
-                # Parse the AI response safely
-                raw_response = completion.choices.message.content.strip()
+                # Isolate raw output string
+                raw_output = completion.choices.message.content.strip()
                 
-                # Clean up format strings if the AI includes structural backticks
-                if raw_response.startswith("```json"):
-                    raw_response = raw_response.replace("```json", "").replace("```", "").strip()
-                elif raw_response.startswith("```"):
-                    raw_response = raw_response.replace("```", "").strip()
+                # FAIL-SAFE UNWRAPPING: Extract only the content inside braces {} to bypass conversational noise
+                match = re.search(r"(\{.*?\})", raw_output, re.DOTALL)
+                if match:
+                    raw_output = match.group(1).strip()
+                
+                # Safely convert extracted clean string into an active dictionary tree
+                data = json.loads(raw_output)
+                
+                # Check data format structures
+                if "x" in data and "y" in data:
+                    # Construct matching DataFrame arrays
+                    df = pd.DataFrame({"X-Axis": data["x"], "Y-Axis": data["y"]})
                     
-                data = json.loads(raw_response)
-                
-                # Plot the interactive graph using Plotly
-                df = pd.DataFrame({"X-Axis": data["x"], "Y-Axis": data["y"]})
-                fig = px.line(df, x="X-Axis", y="Y-Axis", title=data.get("label", "Detected Graph"), markers=True)
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Generate and show clean Python code to replicate it
-                st.write("### 🐍 Python Code to Replicate:")
-                generated_code = f"""import plotly.express as px
+                    # Graph Generation Layer
+                    fig = px.line(df, x="X-Axis", y="Y-Axis", title=data.get("label", "Detected Graph"), markers=True)
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Clean Code Assembly Component
+                    st.write("### 🐍 Python Code to Replicate:")
+                    generated_code = f"""import plotly.express as px
 import pandas as pd
 
-# Data extracted by AI Assistant
+# Data points extracted by your AI Assistant
 data = {{
     'x': {data['x']},
     'y': {data['y']}
@@ -82,10 +93,14 @@ data = {{
 df = pd.DataFrame(data)
 fig = px.line(df, x='x', y='y', title='{data.get("label", "My Graph")}', markers=True)
 fig.show()"""
-                st.code(generated_code, language="python")
+                    st.code(generated_code, language="python")
+                else:
+                    st.error("The AI failed to format the coordinates properly. Please take a clearer photo and try again.")
                 
+            except json.JSONDecodeError:
+                st.error("AI response formatting error. Try snapping the picture again with clearer alignment.")
             except Exception as e:
-                st.error(f"Error processing the graph. Please ensure the image is clear. Details: {e}")
+                st.error(f"System failed to evaluate visualization query. Details: {e}")
 
 # 4. Interactive Chat Assistant Feature at the bottom
 st.divider()
@@ -98,7 +113,6 @@ if user_question:
             st.write(user_question)
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                # Using standard active text model for chatting
                 chat_completion = client.chat.completions.create(
                     model="llama3-8b-8192",
                     messages=[{"role": "user", "content": user_question}]
