@@ -2,6 +2,7 @@ import streamlit as st
 import plotly.express as px
 import pandas as pd
 import json
+import base64
 from groq import Groq
 
 # 1. Page Configuration
@@ -11,7 +12,7 @@ st.write("Snap a photo of any graph to recreate it dynamically and get the code!
 
 # 2. Sidebar for Free API Configuration
 st.sidebar.header("🔧 Setup Setup")
-st.sidebar.write("Get a 100% free API key at [console.groq.com](https://console.groq.com/)")
+st.sidebar.write("Get a 100% free API key at [://groq.com](https://://groq.com/)")
 api_key = st.sidebar.text_input("Enter your Groq API Key:", type="password")
 
 # Initialize Groq Client if key is provided
@@ -33,8 +34,9 @@ with col2:
     if camera_img and client:
         with st.spinner("AI is analyzing the graph structure..."):
             try:
-                # Convert the camera image to bytes for the AI
+                # FIX: Convert the camera image bytes into a Base64 encoded string format for Groq API compatibility
                 image_bytes = camera_img.getvalue()
+                base64_image = base64.b64encode(image_bytes).decode("utf-8")
                 
                 # Ask Llama-Vision to read the graph data points
                 completion = client.chat.completions.create(
@@ -43,15 +45,22 @@ with col2:
                         {
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": "Analyze this graph. Extract 5-10 key approximate (x, y) data points. Return ONLY a valid JSON object like this: {\"x\": [1,2,3], \"y\": [10,20,30], \"label\": \"Graph Title\"}. Do not write conversational text."},
-                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_bytes.hex()}"}}
+                                {"type": "text", "text": "Analyze this graph. Extract 5-10 key approximate (x, y) data points. Return ONLY a valid, clean JSON object like this: {\"x\":, \"y\":, \"label\": \"Graph Title\"}. Do not write any conversational intro or markdown backticks."},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
                             ]
                         }
                     ]
                 )
                 
                 # Parse the AI response safely
-                raw_response = completion.choices[0].message.content
+                raw_response = completion.choices.message.content.strip()
+                
+                # Safety check to strip accidental markdown code blocks if the AI includes them
+                if raw_response.startswith("```json"):
+                    raw_response = raw_response.replace("```json", "").replace("```", "").strip()
+                elif raw_response.startswith("```"):
+                    raw_response = raw_response.replace("```", "").strip()
+                    
                 data = json.loads(raw_response)
                 
                 # Plot the interactive graph using Plotly
@@ -79,7 +88,8 @@ fig.show()"""
                 st.error(f"Error processing the graph. Please ensure the image is clear. Details: {e}")
 
 # 4. Interactive Chat Assistant Feature at the bottom
-st.hr()
+# FIX: Swapped broken st.hr() with correct official Streamlit divider system
+st.divider()
 st.subheader("💬 Ask the AI Graph Assistant")
 user_question = st.chat_input("Ask a question about your data or math equations...")
 
@@ -93,6 +103,6 @@ if user_question:
                     model="llama3-8b-8192",
                     messages=[{"role": "user", "content": user_question}]
                 )
-                st.write(chat_completion.choices[0].message.content)
+                st.write(chat_completion.choices.message.content)
     else:
         st.info("Provide your free Groq API key in the sidebar to chat with the assistant.")
